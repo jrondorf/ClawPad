@@ -26,27 +26,31 @@ struct OpenAIProvider: LLMProvider {
         "gpt-4o-mini"
     ]
 
-    private let apiKey: String
+    /// Closure that provides the API key at request time.
+    /// Architecture Decision: Using a closure instead of a stored key ensures
+    /// the provider always reads the latest value from Keychain, avoiding
+    /// stale configuration after settings changes without app restart.
+    private let apiKeyProvider: @Sendable () -> String?
     private let baseURL: URL
 
     #if !os(Linux)
     private let session: URLSession
 
     init(
-        apiKey: String,
+        apiKeyProvider: @escaping @Sendable () -> String?,
         baseURL: URL = URL(string: "https://api.openai.com")!,
         session: URLSession = .shared
     ) {
-        self.apiKey = apiKey
+        self.apiKeyProvider = apiKeyProvider
         self.baseURL = baseURL
         self.session = session
     }
     #else
     init(
-        apiKey: String,
+        apiKeyProvider: @escaping @Sendable () -> String?,
         baseURL: URL = URL(string: "https://api.openai.com")!
     ) {
-        self.apiKey = apiKey
+        self.apiKeyProvider = apiKeyProvider
         self.baseURL = baseURL
     }
     #endif
@@ -191,6 +195,13 @@ struct OpenAIProvider: LLMProvider {
         configuration: LLMConfiguration,
         stream: Bool
     ) throws -> URLRequest {
+        // Read API key at request time for dynamic retrieval
+        guard let apiKey = apiKeyProvider(), !apiKey.isEmpty else {
+            print("[OpenAIProvider] No API key available at request time")
+            throw AgentError.authenticationFailed
+        }
+        print("[OpenAIProvider] Provider received non-empty API key: true")
+
         let url = baseURL.appendingPathComponent("/v1/chat/completions")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"

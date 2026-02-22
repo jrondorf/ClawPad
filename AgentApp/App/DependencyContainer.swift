@@ -12,15 +12,18 @@
 
 import Foundation
 
-// MARK: - Keychain Helper
+// MARK: - Keychain Service
 
-/// Minimal Keychain wrapper for secure API key storage.
+/// Secure API key storage abstraction using the iOS Keychain.
 /// Uses Security framework for iPadOS Keychain access.
+///
+/// Architecture Decision: Named KeychainService (not Helper) to reflect
+/// its role as a first-class service abstraction with save/read/delete.
 ///
 /// Security: API keys are stored encrypted in the system Keychain,
 /// never in UserDefaults or plain files.
-struct KeychainHelper: Sendable {
-    static let shared = KeychainHelper()
+struct KeychainService: Sendable {
+    static let shared = KeychainService()
 
     private let service = "com.agentapp.apikeys"
 
@@ -48,10 +51,11 @@ struct KeychainHelper: Sendable {
         guard status == errSecSuccess else {
             throw AgentError.serializationFailed("Failed to save API key to Keychain: \(status)")
         }
+        print("[KeychainService] Successfully saved key for account: \(key)")
         #endif
     }
 
-    func load(key: String) -> String? {
+    func read(key: String) -> String? {
         #if os(iOS) || os(macOS) || os(tvOS) || os(watchOS) || os(visionOS)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -64,8 +68,13 @@ struct KeychainHelper: Sendable {
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
 
-        guard status == errSecSuccess, let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        guard status == errSecSuccess, let data = result as? Data else {
+            print("[KeychainService] No key found in Keychain for account: \(key)")
+            return nil
+        }
+        let value = String(data: data, encoding: .utf8)
+        print("[KeychainService] Key exists for account \(key): \(value != nil && !(value?.isEmpty ?? true))")
+        return value
         #else
         return nil
         #endif
@@ -79,6 +88,7 @@ struct KeychainHelper: Sendable {
             kSecAttrAccount as String: key
         ]
         SecItemDelete(query as CFDictionary)
+        print("[KeychainService] Deleted key for account: \(key)")
         #endif
     }
 }
@@ -91,6 +101,10 @@ struct KeychainHelper: Sendable {
 /// On Apple platforms, uses ObservableObject + @Published for SwiftUI binding.
 /// The @unchecked Sendable conformance is safe because all mutations happen
 /// on the main thread via SwiftUI's observation system.
+///
+/// Architecture Decision: API keys are never stored in UserDefaults.
+/// The Keychain is read at access time, ensuring the provider always
+/// gets the latest persisted key without stale configuration state.
 #if canImport(Combine)
 import Combine
 
@@ -102,15 +116,28 @@ final class SettingsManager: ObservableObject, @unchecked Sendable {
         didSet { UserDefaults.standard.set(selectedModel, forKey: "selectedModel") }
     }
 
-    private let keychain = KeychainHelper.shared
+    let keychain: KeychainService
 
-    init() {
+    init(keychain: KeychainService = .shared) {
+        self.keychain = keychain
         self.selectedProvider = UserDefaults.standard.string(forKey: "selectedProvider") ?? "Claude"
         self.selectedModel = UserDefaults.standard.string(forKey: "selectedModel") ?? "claude-3.7-sonnet"
     }
 
+    /// Whether an OpenAI API key is stored in the Keychain.
+    var hasOpenAIKey: Bool {
+        guard let key = keychain.read(key: "openai_api_key") else { return false }
+        return !key.isEmpty
+    }
+
+    /// Whether a Claude API key is stored in the Keychain.
+    var hasClaudeKey: Bool {
+        guard let key = keychain.read(key: "claude_api_key") else { return false }
+        return !key.isEmpty
+    }
+
     var claudeAPIKey: String? {
-        get { keychain.load(key: "claude_api_key") }
+        get { keychain.read(key: "claude_api_key") }
         set {
             if let value = newValue {
                 try? keychain.save(key: "claude_api_key", value: value)
@@ -122,7 +149,7 @@ final class SettingsManager: ObservableObject, @unchecked Sendable {
     }
 
     var openAIAPIKey: String? {
-        get { keychain.load(key: "openai_api_key") }
+        get { keychain.read(key: "openai_api_key") }
         set {
             if let value = newValue {
                 try? keychain.save(key: "openai_api_key", value: value)
@@ -139,10 +166,26 @@ final class SettingsManager: @unchecked Sendable {
     var selectedProvider: String = "Claude"
     var selectedModel: String = "claude-3.7-sonnet"
 
-    private let keychain = KeychainHelper.shared
+    let keychain: KeychainService
+
+    init(keychain: KeychainService = .shared) {
+        self.keychain = keychain
+    }
+
+    /// Whether an OpenAI API key is stored in the Keychain.
+    var hasOpenAIKey: Bool {
+        guard let key = keychain.read(key: "openai_api_key") else { return false }
+        return !key.isEmpty
+    }
+
+    /// Whether a Claude API key is stored in the Keychain.
+    var hasClaudeKey: Bool {
+        guard let key = keychain.read(key: "claude_api_key") else { return false }
+        return !key.isEmpty
+    }
 
     var claudeAPIKey: String? {
-        get { keychain.load(key: "claude_api_key") }
+        get { keychain.read(key: "claude_api_key") }
         set {
             if let value = newValue {
                 try? keychain.save(key: "claude_api_key", value: value)
@@ -153,7 +196,7 @@ final class SettingsManager: @unchecked Sendable {
     }
 
     var openAIAPIKey: String? {
-        get { keychain.load(key: "openai_api_key") }
+        get { keychain.read(key: "openai_api_key") }
         set {
             if let value = newValue {
                 try? keychain.save(key: "openai_api_key", value: value)
@@ -208,20 +251,37 @@ final class DependencyContainer: ObservableObject {
     }
 
     /// Creates an LLM provider based on current settings.
+    ///
+    /// Architecture Decision: The provider receives a closure that reads
+    /// the API key from Keychain at request time. This ensures the provider
+    /// always uses the latest key, even if settings change after creation.
     func makeProvider() -> LLMProvider? {
         switch settings.selectedProvider {
         case "Claude":
-            guard let apiKey = settings.claudeAPIKey, !apiKey.isEmpty else { return nil }
-            return ClaudeProvider(apiKey: apiKey)
+            guard settings.hasClaudeKey else {
+                print("[DependencyContainer] No Claude API key found in Keychain")
+                return nil
+            }
+            let keychain = settings.keychain
+            print("[DependencyContainer] Creating ClaudeProvider with dynamic key retrieval")
+            return ClaudeProvider(apiKeyProvider: {
+                keychain.read(key: "claude_api_key")
+            })
         case "OpenAI":
-            guard let apiKey = settings.openAIAPIKey, !apiKey.isEmpty else { return nil }
-            return OpenAIProvider(apiKey: apiKey)
+            guard settings.hasOpenAIKey else {
+                print("[DependencyContainer] No OpenAI API key found in Keychain")
+                return nil
+            }
+            let keychain = settings.keychain
+            print("[DependencyContainer] Creating OpenAIProvider with dynamic key retrieval")
+            return OpenAIProvider(apiKeyProvider: {
+                keychain.read(key: "openai_api_key")
+            })
         default:
             return nil
         }
     }
 
-    /// Creates an AgentRuntime with the current configuration.
     func makeAgentRuntime() -> AgentRuntime? {
         guard let provider = makeProvider() else { return nil }
         let config = AgentConfiguration(
@@ -268,14 +328,33 @@ final class DependencyContainer: @unchecked Sendable {
         }
     }
 
+    /// Creates an LLM provider based on current settings.
+    ///
+    /// Architecture Decision: The provider receives a closure that reads
+    /// the API key from Keychain at request time. This ensures the provider
+    /// always uses the latest key, even if settings change after creation.
     func makeProvider() -> LLMProvider? {
         switch settings.selectedProvider {
         case "Claude":
-            guard let apiKey = settings.claudeAPIKey, !apiKey.isEmpty else { return nil }
-            return ClaudeProvider(apiKey: apiKey)
+            guard settings.hasClaudeKey else {
+                print("[DependencyContainer] No Claude API key found in Keychain")
+                return nil
+            }
+            let keychain = settings.keychain
+            print("[DependencyContainer] Creating ClaudeProvider with dynamic key retrieval")
+            return ClaudeProvider(apiKeyProvider: {
+                keychain.read(key: "claude_api_key")
+            })
         case "OpenAI":
-            guard let apiKey = settings.openAIAPIKey, !apiKey.isEmpty else { return nil }
-            return OpenAIProvider(apiKey: apiKey)
+            guard settings.hasOpenAIKey else {
+                print("[DependencyContainer] No OpenAI API key found in Keychain")
+                return nil
+            }
+            let keychain = settings.keychain
+            print("[DependencyContainer] Creating OpenAIProvider with dynamic key retrieval")
+            return OpenAIProvider(apiKeyProvider: {
+                keychain.read(key: "openai_api_key")
+            })
         default:
             return nil
         }
