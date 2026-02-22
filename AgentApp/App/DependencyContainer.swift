@@ -106,7 +106,7 @@ final class SettingsManager: ObservableObject, @unchecked Sendable {
 
     init() {
         self.selectedProvider = UserDefaults.standard.string(forKey: "selectedProvider") ?? "Claude"
-        self.selectedModel = UserDefaults.standard.string(forKey: "selectedModel") ?? "claude-sonnet-4-20250514"
+        self.selectedModel = UserDefaults.standard.string(forKey: "selectedModel") ?? "claude-3.7-sonnet"
     }
 
     var claudeAPIKey: String? {
@@ -137,7 +137,7 @@ final class SettingsManager: ObservableObject, @unchecked Sendable {
 /// Fallback SettingsManager for non-Apple platforms (used for compilation verification).
 final class SettingsManager: @unchecked Sendable {
     var selectedProvider: String = "Claude"
-    var selectedModel: String = "claude-sonnet-4-20250514"
+    var selectedModel: String = "claude-3.7-sonnet"
 
     private let keychain = KeychainHelper.shared
 
@@ -178,11 +178,15 @@ final class DependencyContainer: ObservableObject {
     let settings: SettingsManager
     let conversationStore: ConversationStore
     let toolRegistry: ToolRegistry
+    let modelRegistry: ModelRegistry
+    let sessionStore: SessionStore
 
     init() {
         self.settings = SettingsManager()
         self.conversationStore = ConversationStore()
         self.toolRegistry = ToolRegistry()
+        self.modelRegistry = ModelRegistry()
+        self.sessionStore = SessionStore(conversationStore: conversationStore)
     }
 
     /// Initializes the container by registering tools and loading data.
@@ -238,11 +242,15 @@ final class DependencyContainer: @unchecked Sendable {
     let settings: SettingsManager
     let conversationStore: ConversationStore
     let toolRegistry: ToolRegistry
+    let modelRegistry: ModelRegistry
+    let sessionStore: SessionStore
 
     init() {
         self.settings = SettingsManager()
         self.conversationStore = ConversationStore()
         self.toolRegistry = ToolRegistry()
+        self.modelRegistry = ModelRegistry()
+        self.sessionStore = SessionStore(conversationStore: conversationStore)
     }
 
     func bootstrap() async {

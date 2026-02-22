@@ -19,11 +19,11 @@ import FoundationNetworking
 struct OpenAIProvider: LLMProvider {
     let providerName = "OpenAI"
     let availableModels = [
+        "gpt-4.1",
+        "gpt-4.1-mini",
+        "gpt-4.1-turbo",
         "gpt-4o",
-        "gpt-4o-mini",
-        "gpt-4-turbo",
-        "o1-preview",
-        "o1-mini"
+        "gpt-4o-mini"
     ]
 
     private let apiKey: String

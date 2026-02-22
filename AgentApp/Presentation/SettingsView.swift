@@ -4,6 +4,10 @@
 // Settings interface for configuring API keys, selecting LLM providers,
 // and managing application preferences.
 //
+// Architecture Decision: Model options are loaded dynamically from
+// ModelRegistry, grouped by provider, with capability indicators.
+// This eliminates hardcoded model enums and supports future model additions.
+//
 // Security: API keys are displayed as secure fields and stored in Keychain.
 // Keys are never logged, persisted in UserDefaults, or sent to analytics.
 
@@ -14,11 +18,22 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var settings: SettingsManager
+    @EnvironmentObject var container: DependencyContainer
     @Environment(\.dismiss) private var dismiss
 
     @State private var claudeKey: String = ""
     @State private var openAIKey: String = ""
     @State private var showSavedAlert = false
+
+    /// The provider type derived from the current settings selection.
+    private var selectedProviderType: LLMProviderType {
+        LLMProviderType(rawValue: settings.selectedProvider) ?? .anthropic
+    }
+
+    /// Models available for the currently selected provider.
+    private var modelsForProvider: [LLMModel] {
+        container.modelRegistry.models(for: selectedProviderType)
+    }
 
     var body: some View {
         NavigationStack {
@@ -26,30 +41,55 @@ struct SettingsView: View {
                 // Provider Selection
                 Section {
                     Picker("LLM Provider", selection: $settings.selectedProvider) {
-                        Text("Claude (Anthropic)").tag("Claude")
-                        Text("OpenAI").tag("OpenAI")
+                        ForEach(LLMProviderType.allCases, id: \.rawValue) { provider in
+                            Text(providerDisplayName(provider)).tag(provider.rawValue)
+                        }
                     }
                     .pickerStyle(.segmented)
+                    .onChange(of: settings.selectedProvider) { _, newProvider in
+                        // Auto-select the first model when switching providers
+                        if let providerType = LLMProviderType(rawValue: newProvider),
+                           let firstModel = container.modelRegistry.models(for: providerType).first {
+                            settings.selectedModel = firstModel.id
+                        }
+                    }
                 } header: {
                     Text("Provider")
                 } footer: {
                     Text("Select which LLM provider to use for conversations.")
                 }
 
-                // Model Selection
+                // Model Selection — dynamically loaded from ModelRegistry
                 Section("Model") {
-                    if settings.selectedProvider == "Claude" {
-                        Picker("Model", selection: $settings.selectedModel) {
-                            Text("Claude Sonnet 4").tag("claude-sonnet-4-20250514")
-                            Text("Claude Opus 4").tag("claude-opus-4-20250514")
-                            Text("Claude 3.5 Haiku").tag("claude-3-5-haiku-20241022")
+                    Picker("Model", selection: $settings.selectedModel) {
+                        ForEach(modelsForProvider) { model in
+                            HStack {
+                                Text(model.displayName)
+                                Spacer()
+                                modelCapabilityIcons(model)
+                            }
+                            .tag(model.id)
                         }
-                    } else {
-                        Picker("Model", selection: $settings.selectedModel) {
-                            Text("GPT-4o").tag("gpt-4o")
-                            Text("GPT-4o Mini").tag("gpt-4o-mini")
-                            Text("GPT-4 Turbo").tag("gpt-4-turbo")
-                            Text("o1 Preview").tag("o1-preview")
+                    }
+
+                    // Capability legend
+                    if let selected = modelsForProvider.first(where: { $0.id == settings.selectedModel }) {
+                        HStack(spacing: 12) {
+                            if selected.supportsTools {
+                                Label("Tools", systemImage: "wrench.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.blue)
+                            }
+                            if selected.supportsVision {
+                                Label("Vision", systemImage: "eye.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(.green)
+                            }
+                            if selected.maxContextTokens >= 200_000 {
+                                Label("Large Context", systemImage: "text.alignleft")
+                                    .font(.caption)
+                                    .foregroundStyle(.orange)
+                            }
                         }
                     }
                 }
@@ -109,6 +149,36 @@ struct SettingsView: View {
                 // Pre-fill with masked indicators if keys exist
                 claudeKey = settings.claudeAPIKey != nil ? "" : ""
                 openAIKey = settings.openAIAPIKey != nil ? "" : ""
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func providerDisplayName(_ provider: LLMProviderType) -> String {
+        switch provider {
+        case .anthropic: return "Claude (Anthropic)"
+        case .openAI: return "OpenAI"
+        }
+    }
+
+    @ViewBuilder
+    private func modelCapabilityIcons(_ model: LLMModel) -> some View {
+        HStack(spacing: 4) {
+            if model.supportsTools {
+                Image(systemName: "wrench.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.blue)
+            }
+            if model.supportsVision {
+                Image(systemName: "eye.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.green)
+            }
+            if model.maxContextTokens >= 200_000 {
+                Image(systemName: "text.alignleft")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
             }
         }
     }

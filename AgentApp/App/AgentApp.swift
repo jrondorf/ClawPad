@@ -23,6 +23,7 @@ struct AgentApp: App {
             RootView()
                 .environmentObject(container)
                 .environmentObject(container.settings)
+                .environmentObject(container.sessionStore)
                 .task {
                     await container.bootstrap()
                 }
@@ -35,21 +36,25 @@ struct AgentApp: App {
 /// Root navigation view that manages the split view layout for iPad.
 /// Uses NavigationSplitView for the sidebar + detail pattern
 /// optimized for iPad screen sizes.
+///
+/// Architecture Decision: Session creation is handled by SessionStore
+/// directly through ConversationStore, without requiring an LLM provider.
+/// This decouples "New Chat" from API key configuration. Settings is
+/// reachable only via the dedicated gear button.
 struct RootView: View {
     @EnvironmentObject var container: DependencyContainer
-    @State private var selectedSessionID: UUID?
+    @EnvironmentObject var sessionStore: SessionStore
     @State private var showSettings = false
-    @State private var sessions: [ConversationSession] = []
 
     var body: some View {
         NavigationSplitView {
             // Sidebar: Session list
-            List(selection: $selectedSessionID) {
-                ForEach(sessions) { session in
+            List(selection: $sessionStore.selectedSessionID) {
+                ForEach(sessionStore.sessions) { session in
                     VStack(alignment: .leading, spacing: 4) {
                         Text(session.title)
                             .font(.headline)
-                        Text(session.updatedAt.relativeString)
+                        Text(session.createdAt.relativeString)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -72,7 +77,7 @@ struct RootView: View {
             }
         } detail: {
             // Detail: Chat view
-            if let sessionID = selectedSessionID {
+            if let sessionID = sessionStore.selectedSessionID {
                 ChatView(sessionID: sessionID)
                     .id(sessionID)
             } else {
@@ -87,48 +92,19 @@ struct RootView: View {
             SettingsView()
         }
         .task {
-            await loadSessions()
-        }
-    }
-
-    private func loadSessions() async {
-        do {
-            sessions = try await container.conversationStore.listSessions()
-        } catch {
-            print("Failed to load sessions: \(error)")
+            await sessionStore.loadSessions()
         }
     }
 
     private func createNewSession() {
         Task {
-            guard let runtime = container.makeAgentRuntime() else {
-                showSettings = true
-                return
-            }
-            do {
-                let session = try await runtime.createSession(title: "New Chat")
-                sessions.insert(session, at: 0)
-                selectedSessionID = session.id
-            } catch {
-                print("Failed to create session: \(error)")
-            }
+            await sessionStore.createNewSession()
         }
     }
 
     private func deleteSessions(at offsets: IndexSet) {
         Task {
-            for index in offsets {
-                let session = sessions[index]
-                do {
-                    try await container.conversationStore.deleteSession(session.id)
-                } catch {
-                    print("Failed to delete session: \(error)")
-                }
-            }
-            sessions.remove(atOffsets: offsets)
-            if let id = selectedSessionID, !sessions.contains(where: { $0.id == id }) {
-                selectedSessionID = nil
-            }
+            await sessionStore.deleteSessions(at: offsets)
         }
     }
 }
