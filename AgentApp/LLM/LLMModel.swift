@@ -45,8 +45,6 @@ struct LLMModel: Identifiable, Hashable, Sendable {
     let supportedEndpoint: OpenAIEndpointType
     /// Whether this model uses `max_completion_tokens` instead of `max_tokens`.
     let usesMaxCompletionTokens: Bool
-    /// Whether this model supports the `temperature` parameter. Reasoning models (e.g. o3, o4-mini) do not.
-    let supportsTemperature: Bool
 
     init(
         id: String,
@@ -56,8 +54,7 @@ struct LLMModel: Identifiable, Hashable, Sendable {
         supportsVision: Bool,
         maxContextTokens: Int,
         supportedEndpoint: OpenAIEndpointType = .chatCompletions,
-        usesMaxCompletionTokens: Bool = false,
-        supportsTemperature: Bool = true
+        usesMaxCompletionTokens: Bool = false
     ) {
         self.id = id
         self.displayName = displayName
@@ -67,6 +64,5 @@ struct LLMModel: Identifiable, Hashable, Sendable {
         self.maxContextTokens = maxContextTokens
         self.supportedEndpoint = supportedEndpoint
         self.usesMaxCompletionTokens = usesMaxCompletionTokens
-        self.supportsTemperature = supportsTemperature
     }
 }

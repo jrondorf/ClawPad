@@ -162,8 +162,7 @@ final class ModelRegistry: @unchecked Sendable {
                 supportsVision: true,
                 maxContextTokens: 1_000_000,
                 supportedEndpoint: .responses,
-                usesMaxCompletionTokens: true,
-                supportsTemperature: false
+                usesMaxCompletionTokens: true
             ),
             LLMModel(
                 id: "gpt-5.3-codex-spark",
@@ -173,11 +172,10 @@ final class ModelRegistry: @unchecked Sendable {
                 supportsVision: true,
                 maxContextTokens: 1_000_000,
                 supportedEndpoint: .responses,
-                usesMaxCompletionTokens: true,
-                supportsTemperature: false
+                usesMaxCompletionTokens: true
             ),
 
-            // OpenAI reasoning models — do not support temperature
+            // OpenAI reasoning models
             LLMModel(
                 id: "o3",
                 displayName: "o3",
@@ -186,8 +184,7 @@ final class ModelRegistry: @unchecked Sendable {
                 supportsVision: true,
                 maxContextTokens: 200_000,
                 supportedEndpoint: .responses,
-                usesMaxCompletionTokens: true,
-                supportsTemperature: false
+                usesMaxCompletionTokens: true
             ),
             LLMModel(
                 id: "o4-mini",
@@ -197,8 +194,7 @@ final class ModelRegistry: @unchecked Sendable {
                 supportsVision: true,
                 maxContextTokens: 200_000,
                 supportedEndpoint: .responses,
-                usesMaxCompletionTokens: true,
-                supportsTemperature: false
+                usesMaxCompletionTokens: true
             ),
 
             // Anthropic models

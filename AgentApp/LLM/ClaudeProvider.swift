@@ -225,10 +225,6 @@ struct ClaudeProvider: LLMProvider {
             body["tools"] = tools.map { encodeTool($0) }
         }
 
-        if let temperature = Optional(configuration.temperature), temperature >= 0 {
-            body["temperature"] = temperature
-        }
-
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return request
     }
