@@ -41,7 +41,7 @@ struct LLMModel: Identifiable, Hashable, Sendable {
     let supportsTools: Bool
     let supportsVision: Bool
     let maxContextTokens: Int
-    /// The OpenAI API endpoint this model requires. Nil for non-OpenAI providers.
+    /// The OpenAI API endpoint this model requires. Defaults to `.chatCompletions` for non-OpenAI providers.
     let supportedEndpoint: OpenAIEndpointType
     /// Whether this model uses `max_completion_tokens` instead of `max_tokens`.
     let usesMaxCompletionTokens: Bool
