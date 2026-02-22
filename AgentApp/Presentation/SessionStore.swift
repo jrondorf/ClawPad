@@ -79,7 +79,10 @@ final class SessionStore: ObservableObject {
                 print("Failed to delete session: \(error)")
             }
         }
-        sessions.remove(atOffsets: offsets)
+        // Remove in reverse order to preserve indices
+        for index in offsets.sorted().reversed() {
+            sessions.remove(at: index)
+        }
         if let id = selectedSessionID, !sessions.contains(where: { $0.id == id }) {
             selectedSessionID = nil
         }
