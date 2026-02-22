@@ -194,4 +194,54 @@ final class ModelRegistryTests: XCTestCase {
         XCTAssertEqual(model.supportedEndpoint, .chatCompletions)
         XCTAssertFalse(model.usesMaxCompletionTokens)
     }
+
+    // MARK: - supportsTemperature Tests
+
+    func testLLMModelDefaultSupportsTemperature() {
+        // Models created without specifying supportsTemperature should default to true
+        let model = LLMModel(
+            id: "test-model",
+            displayName: "Test",
+            provider: .openAI,
+            supportsTools: true,
+            supportsVision: false,
+            maxContextTokens: 128_000
+        )
+        XCTAssertTrue(model.supportsTemperature)
+    }
+
+    func testLLMModelSupportsTemperatureFalse() {
+        let model = LLMModel(
+            id: "o3",
+            displayName: "o3",
+            provider: .openAI,
+            supportsTools: true,
+            supportsVision: true,
+            maxContextTokens: 200_000,
+            supportsTemperature: false
+        )
+        XCTAssertFalse(model.supportsTemperature)
+    }
+
+    func testReasoningModelsDoNotSupportTemperature() {
+        let registry = ModelRegistry()
+        let openAIModels = registry.models(for: .openAI)
+
+        for model in openAIModels {
+            if model.id == "o3" || model.id == "o4-mini" {
+                XCTAssertFalse(model.supportsTemperature,
+                               "\(model.id) should not support temperature")
+            } else {
+                XCTAssertTrue(model.supportsTemperature,
+                              "\(model.id) should support temperature")
+            }
+        }
+    }
+
+    func testDefaultRegistryContainsReasoningModels() {
+        let registry = ModelRegistry()
+        let ids = registry.models(for: .openAI).map { $0.id }
+        XCTAssertTrue(ids.contains("o3"))
+        XCTAssertTrue(ids.contains("o4-mini"))
+    }
 }

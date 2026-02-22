@@ -191,10 +191,14 @@ struct OpenAIProvider: LLMProvider {
 
         var body: [String: Any] = [
             "model": configuration.model,
-            "temperature": configuration.temperature,
             "stream": stream,
             "max_output_tokens": configuration.maxTokens
         ]
+
+        // Only include temperature for models that support it (not reasoning models like o3/o4-mini)
+        if configuration.supportsTemperature {
+            body["temperature"] = configuration.temperature
+        }
 
         body["input"] = messages.map { encodeMessage($0) }
 

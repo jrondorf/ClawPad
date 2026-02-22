@@ -42,11 +42,15 @@ struct AgentConfiguration: Codable, Sendable, Identifiable {
 
     /// Converts to LLMConfiguration for the provider.
     var llmConfiguration: LLMConfiguration {
-        LLMConfiguration(
+        let modelSupportsTemperature = ModelRegistry.defaultModels()
+            .first(where: { $0.id == model })
+            .map { $0.supportsTemperature } ?? true
+        return LLMConfiguration(
             model: model,
             maxTokens: maxTokens,
             temperature: temperature,
-            systemPrompt: systemPrompt
+            systemPrompt: systemPrompt,
+            supportsTemperature: modelSupportsTemperature
         )
     }
 }
