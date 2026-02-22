@@ -246,10 +246,21 @@ final class DependencyContainer: ObservableObject {
     let sessionStore: SessionStore
 
     init() {
-        self.settings = SettingsManager()
+        let settingsManager = SettingsManager()
+        self.settings = settingsManager
         self.conversationStore = ConversationStore()
         self.toolRegistry = ToolRegistry()
-        self.modelRegistry = ModelRegistry()
+
+        // Inject discovery providers into ModelRegistry for dynamic model refresh.
+        // API keys are read from Keychain at fetch time via closures, never stored.
+        let keychain = settingsManager.keychain
+        let discoveryProviders: [ModelDiscoveryProvider] = [
+            OpenAIModelDiscoveryProvider(apiKeyProvider: {
+                keychain.read(key: "openai_api_key")
+            }),
+            ClaudeModelDiscoveryProvider()
+        ]
+        self.modelRegistry = ModelRegistry(discoveryProviders: discoveryProviders)
         self.sessionStore = SessionStore(conversationStore: conversationStore)
     }
 
@@ -327,10 +338,20 @@ final class DependencyContainer: @unchecked Sendable {
     let sessionStore: SessionStore
 
     init() {
-        self.settings = SettingsManager()
+        let settingsManager = SettingsManager()
+        self.settings = settingsManager
         self.conversationStore = ConversationStore()
         self.toolRegistry = ToolRegistry()
-        self.modelRegistry = ModelRegistry()
+
+        // Inject discovery providers into ModelRegistry for dynamic model refresh.
+        let keychain = settingsManager.keychain
+        let discoveryProviders: [ModelDiscoveryProvider] = [
+            OpenAIModelDiscoveryProvider(apiKeyProvider: {
+                keychain.read(key: "openai_api_key")
+            }),
+            ClaudeModelDiscoveryProvider()
+        ]
+        self.modelRegistry = ModelRegistry(discoveryProviders: discoveryProviders)
         self.sessionStore = SessionStore(conversationStore: conversationStore)
     }
 

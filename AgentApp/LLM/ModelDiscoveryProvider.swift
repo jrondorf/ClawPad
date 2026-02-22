@@ -1,0 +1,244 @@
+// ModelDiscoveryProvider.swift
+// AgentApp
+//
+// Defines the protocol and concrete implementations for dynamic LLM model
+// discovery. Providers fetch available models from their respective APIs
+// (or return curated lists) and map them into [LLMModel].
+//
+// Architecture Decision: Each provider encapsulates its own discovery logic
+// (network call for OpenAI, static list for Claude) behind a uniform protocol.
+// This enables the ModelRegistry to refresh models per-provider without
+// coupling to any specific API shape. Providers are injected via
+// DependencyContainer, preserving testability and separation of concerns.
+//
+// Security: API keys are read from KeychainService at call time and never
+// logged. Errors are typed without including sensitive data.
+
+import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
+// MARK: - Discovery Error
+
+/// Errors specific to model discovery operations.
+enum ModelDiscoveryError: Error, Sendable, LocalizedError {
+    case noAPIKey
+    case networkError(String)
+    case decodingError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .noAPIKey:
+            return "No API key configured for this provider."
+        case .networkError(let detail):
+            return "Network error during model discovery: \(detail)"
+        case .decodingError(let detail):
+            return "Failed to decode model list: \(detail)"
+        }
+    }
+}
+
+// MARK: - Discovery Protocol
+
+/// Abstraction for fetching the list of available models from an LLM provider.
+/// Implementations may call a remote API or return a static curated list.
+protocol ModelDiscoveryProvider: Sendable {
+    /// The provider type this discovery provider serves.
+    var providerType: LLMProviderType { get }
+
+    /// Fetches the current list of models from this provider.
+    func fetchModels() async throws -> [LLMModel]
+}
+
+// MARK: - OpenAI Model Discovery
+
+/// Discovers available models from the OpenAI API by calling GET /v1/models.
+/// Filters results to include only chat-capable models (id starts with "gpt-")
+/// and excludes embeddings, audio-only, moderation, and system models.
+///
+/// Architecture Decision: Uses @Sendable closure for API key retrieval,
+/// consistent with the existing provider pattern (OpenAIProvider).
+/// URLSession with async/await is used for the network call.
+struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
+    let providerType: LLMProviderType = .openAI
+
+    private let apiKeyProvider: @Sendable () -> String?
+    private let baseURL: URL
+
+    #if !os(Linux)
+    private let session: URLSession
+
+    init(
+        apiKeyProvider: @escaping @Sendable () -> String?,
+        baseURL: URL = URL(string: "https://api.openai.com")!,
+        session: URLSession = .shared
+    ) {
+        self.apiKeyProvider = apiKeyProvider
+        self.baseURL = baseURL
+        self.session = session
+    }
+    #else
+    init(
+        apiKeyProvider: @escaping @Sendable () -> String?,
+        baseURL: URL = URL(string: "https://api.openai.com")!
+    ) {
+        self.apiKeyProvider = apiKeyProvider
+        self.baseURL = baseURL
+    }
+    #endif
+
+    func fetchModels() async throws -> [LLMModel] {
+        guard let apiKey = apiKeyProvider(), !apiKey.isEmpty else {
+            print("[ModelDiscovery] No OpenAI API key available")
+            throw ModelDiscoveryError.noAPIKey
+        }
+
+        #if os(Linux)
+        print("[ModelDiscovery] Network discovery not supported on Linux")
+        throw ModelDiscoveryError.networkError("Not supported on this platform")
+        #else
+        let url = baseURL.appendingPathComponent("/v1/models")
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch {
+            print("[ModelDiscovery] OpenAI network request failed: \(error.localizedDescription)")
+            throw ModelDiscoveryError.networkError(error.localizedDescription)
+        }
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ModelDiscoveryError.networkError("Invalid response type")
+        }
+
+        guard httpResponse.statusCode == 200 else {
+            let body = String(data: data.prefix(500), encoding: .utf8) ?? "unknown"
+            print("[ModelDiscovery] OpenAI API returned HTTP \(httpResponse.statusCode)")
+            throw ModelDiscoveryError.networkError("HTTP \(httpResponse.statusCode): \(body)")
+        }
+
+        // Decode the response safely
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let modelList = json["data"] as? [[String: Any]] else {
+            throw ModelDiscoveryError.decodingError("Unexpected response structure")
+        }
+
+        // Prefixes to exclude: embeddings, audio, moderation, system/internal models
+        let excludedPrefixes = ["text-embedding", "embedding", "tts-", "whisper", "dall-e",
+                                "davinci", "babbage", "moderation", "omni-moderation"]
+
+        let models: [LLMModel] = modelList.compactMap { modelObj in
+            guard let id = modelObj["id"] as? String else { return nil }
+
+            // Include only chat-capable public models (gpt-* prefix)
+            guard id.hasPrefix("gpt-") else { return nil }
+
+            // Exclude known non-chat models even if they start with gpt-
+            for prefix in excludedPrefixes {
+                if id.hasPrefix(prefix) { return nil }
+            }
+
+            // Exclude instruct-only variants and realtime/audio-specific models
+            if id.contains("instruct") || id.contains("realtime") || id.contains("audio") {
+                return nil
+            }
+
+            let displayName = Self.formatDisplayName(id)
+            return LLMModel(
+                id: id,
+                displayName: displayName,
+                provider: .openAI,
+                supportsTools: true,
+                supportsVision: id.contains("4o") || id.contains("4.1") || id.contains("4-turbo"),
+                maxContextTokens: Self.estimateContextWindow(id)
+            )
+        }
+        .sorted { $0.id < $1.id }
+
+        print("[ModelDiscovery] OpenAI: discovered \(models.count) chat models")
+        return models
+        #endif
+    }
+
+    // MARK: - Helpers
+
+    /// Formats a model ID into a human-readable display name.
+    static func formatDisplayName(_ id: String) -> String {
+        id.split(separator: "-")
+            .map { segment in
+                let s = String(segment)
+                // Capitalize known abbreviations
+                if s.lowercased() == "gpt" { return "GPT" }
+                if s.lowercased() == "mini" { return "Mini" }
+                if s.lowercased() == "turbo" { return "Turbo" }
+                return s.prefix(1).uppercased() + s.dropFirst()
+            }
+            .joined(separator: "-")
+    }
+
+    /// Estimates context window based on known model ID patterns.
+    static func estimateContextWindow(_ id: String) -> Int {
+        if id.contains("4.1") { return 1_000_000 }
+        if id.contains("4o") { return 128_000 }
+        if id.contains("4-turbo") { return 128_000 }
+        if id.contains("gpt-4") { return 128_000 }
+        if id.contains("gpt-3.5") { return 16_385 }
+        return 128_000
+    }
+}
+
+// MARK: - Claude Model Discovery
+
+/// Returns a curated list of modern Claude models without network calls.
+/// Anthropic does not currently offer a public model listing API, so this
+/// provider returns a maintained static list.
+///
+/// Architecture Decision: Easily replaceable with a real network discovery
+/// implementation if Anthropic adds a models endpoint in the future.
+struct ClaudeModelDiscoveryProvider: ModelDiscoveryProvider {
+    let providerType: LLMProviderType = .anthropic
+
+    func fetchModels() async throws -> [LLMModel] {
+        let models = [
+            LLMModel(
+                id: "claude-3.5-sonnet",
+                displayName: "Claude 3.5 Sonnet",
+                provider: .anthropic,
+                supportsTools: true,
+                supportsVision: true,
+                maxContextTokens: 200_000
+            ),
+            LLMModel(
+                id: "claude-3.7-sonnet",
+                displayName: "Claude 3.7 Sonnet",
+                provider: .anthropic,
+                supportsTools: true,
+                supportsVision: true,
+                maxContextTokens: 200_000
+            ),
+            LLMModel(
+                id: "claude-opus-4",
+                displayName: "Claude Opus 4",
+                provider: .anthropic,
+                supportsTools: true,
+                supportsVision: true,
+                maxContextTokens: 200_000
+            ),
+            LLMModel(
+                id: "claude-opus-4.6",
+                displayName: "Claude Opus 4.6",
+                provider: .anthropic,
+                supportsTools: true,
+                supportsVision: true,
+                maxContextTokens: 200_000
+            ),
+        ]
+        print("[ModelDiscovery] Claude: returning \(models.count) curated models")
+        return models
+    }
+}
