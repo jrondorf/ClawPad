@@ -35,7 +35,8 @@ struct KeychainService: Sendable {
         let deleteQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key
+            kSecAttrAccount as String: key,
+            kSecUseDataProtectionKeychain as String: true
         ]
         SecItemDelete(deleteQuery as CFDictionary)
 
@@ -44,11 +45,13 @@ struct KeychainService: Sendable {
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            kSecUseDataProtectionKeychain as String: true
         ]
 
         let status = SecItemAdd(addQuery as CFDictionary, nil)
         guard status == errSecSuccess else {
+            print("[KeychainService] Failed to save key for account: \(key), status: \(status)")
             throw AgentError.serializationFailed("Failed to save API key to Keychain: \(status)")
         }
         print("[KeychainService] Successfully saved key for account: \(key)")
@@ -62,7 +65,8 @@ struct KeychainService: Sendable {
             kSecAttrService as String: service,
             kSecAttrAccount as String: key,
             kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseDataProtectionKeychain as String: true
         ]
 
         var result: AnyObject?
@@ -85,7 +89,8 @@ struct KeychainService: Sendable {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: key
+            kSecAttrAccount as String: key,
+            kSecUseDataProtectionKeychain as String: true
         ]
         SecItemDelete(query as CFDictionary)
         print("[KeychainService] Deleted key for account: \(key)")
@@ -140,7 +145,11 @@ final class SettingsManager: ObservableObject, @unchecked Sendable {
         get { keychain.read(key: "claude_api_key") }
         set {
             if let value = newValue {
-                try? keychain.save(key: "claude_api_key", value: value)
+                do {
+                    try keychain.save(key: "claude_api_key", value: value)
+                } catch {
+                    print("[SettingsManager] Failed to save Claude API key: \(error)")
+                }
             } else {
                 keychain.delete(key: "claude_api_key")
             }
@@ -152,7 +161,11 @@ final class SettingsManager: ObservableObject, @unchecked Sendable {
         get { keychain.read(key: "openai_api_key") }
         set {
             if let value = newValue {
-                try? keychain.save(key: "openai_api_key", value: value)
+                do {
+                    try keychain.save(key: "openai_api_key", value: value)
+                } catch {
+                    print("[SettingsManager] Failed to save OpenAI API key: \(error)")
+                }
             } else {
                 keychain.delete(key: "openai_api_key")
             }
@@ -188,7 +201,11 @@ final class SettingsManager: @unchecked Sendable {
         get { keychain.read(key: "claude_api_key") }
         set {
             if let value = newValue {
-                try? keychain.save(key: "claude_api_key", value: value)
+                do {
+                    try keychain.save(key: "claude_api_key", value: value)
+                } catch {
+                    print("[SettingsManager] Failed to save Claude API key: \(error)")
+                }
             } else {
                 keychain.delete(key: "claude_api_key")
             }
@@ -199,7 +216,11 @@ final class SettingsManager: @unchecked Sendable {
         get { keychain.read(key: "openai_api_key") }
         set {
             if let value = newValue {
-                try? keychain.save(key: "openai_api_key", value: value)
+                do {
+                    try keychain.save(key: "openai_api_key", value: value)
+                } catch {
+                    print("[SettingsManager] Failed to save OpenAI API key: \(error)")
+                }
             } else {
                 keychain.delete(key: "openai_api_key")
             }
