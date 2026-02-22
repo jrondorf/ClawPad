@@ -186,11 +186,19 @@ struct SettingsView: View {
     private func saveKeys() {
         if !claudeKey.isEmpty {
             settings.claudeAPIKey = claudeKey
-            print("[SettingsView] Claude API key saved to Keychain")
+            if settings.hasClaudeKey {
+                print("[SettingsView] Claude API key saved to Keychain")
+            } else {
+                print("[SettingsView] Failed to save Claude API key to Keychain")
+            }
         }
         if !openAIKey.isEmpty {
             settings.openAIAPIKey = openAIKey
-            print("[SettingsView] OpenAI API key saved to Keychain")
+            if settings.hasOpenAIKey {
+                print("[SettingsView] OpenAI API key saved to Keychain")
+            } else {
+                print("[SettingsView] Failed to save OpenAI API key to Keychain")
+            }
         }
         print("[SettingsView] hasClaudeKey: \(settings.hasClaudeKey), hasOpenAIKey: \(settings.hasOpenAIKey)")
         showSavedAlert = true
