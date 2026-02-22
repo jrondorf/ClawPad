@@ -182,7 +182,7 @@ struct ChatView: View {
                 // Tool log toggle
                 Button(action: { viewModel.showToolLog.toggle() }) {
                     Image(systemName: "wrench.and.screwdriver")
-                        .foregroundStyle(viewModel.toolLog.isEmpty ? .secondary : .blue)
+                        .foregroundColor(viewModel.toolLog.isEmpty ? .secondary : .blue)
                 }
 
                 // Text input
@@ -197,13 +197,13 @@ struct ChatView: View {
                     Button(action: { viewModel.cancel() }) {
                         Image(systemName: "stop.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(.red)
+                            .foregroundColor(.red)
                     }
                 } else {
                     Button(action: sendMessage) {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.title2)
-                            .foregroundStyle(inputText.isBlank ? .secondary : .blue)
+                            .foregroundColor(inputText.isBlank ? .secondary : .blue)
                     }
                     .disabled(inputText.isBlank)
                 }
@@ -245,3 +245,4 @@ struct ChatView: View {
     }
 }
 #endif
+
