@@ -113,10 +113,10 @@ final class ModelRegistry: @unchecked Sendable {
     /// The built-in set of models. Update this list when new models are released.
     static func defaultModels() -> [LLMModel] {
         [
-            // OpenAI models — gpt-4.1+ use the Responses API
+            // GPT-5 family
             LLMModel(
-                id: "gpt-4.1",
-                displayName: "GPT-4.1",
+                id: "gpt-5",
+                displayName: "GPT-5",
                 provider: .openAI,
                 supportsTools: true,
                 supportsVision: true,
@@ -125,8 +125,8 @@ final class ModelRegistry: @unchecked Sendable {
                 usesMaxCompletionTokens: true
             ),
             LLMModel(
-                id: "gpt-4.1-mini",
-                displayName: "GPT-4.1 Mini",
+                id: "gpt-5-mini",
+                displayName: "GPT-5 Mini",
                 provider: .openAI,
                 supportsTools: true,
                 supportsVision: true,
@@ -135,8 +135,8 @@ final class ModelRegistry: @unchecked Sendable {
                 usesMaxCompletionTokens: true
             ),
             LLMModel(
-                id: "gpt-4.1-turbo",
-                displayName: "GPT-4.1 Turbo",
+                id: "gpt-5.1",
+                displayName: "GPT-5.1",
                 provider: .openAI,
                 supportsTools: true,
                 supportsVision: true,
@@ -145,20 +145,36 @@ final class ModelRegistry: @unchecked Sendable {
                 usesMaxCompletionTokens: true
             ),
             LLMModel(
-                id: "gpt-4o",
-                displayName: "GPT-4o",
+                id: "gpt-5.2",
+                displayName: "GPT-5.2",
                 provider: .openAI,
                 supportsTools: true,
                 supportsVision: true,
-                maxContextTokens: 128_000
+                maxContextTokens: 1_000_000,
+                supportedEndpoint: .responses,
+                usesMaxCompletionTokens: true
             ),
             LLMModel(
-                id: "gpt-4o-mini",
-                displayName: "GPT-4o Mini",
+                id: "gpt-5.3-codex",
+                displayName: "GPT-5.3 Codex",
                 provider: .openAI,
                 supportsTools: true,
                 supportsVision: true,
-                maxContextTokens: 128_000
+                maxContextTokens: 1_000_000,
+                supportedEndpoint: .responses,
+                usesMaxCompletionTokens: true,
+                supportsTemperature: false
+            ),
+            LLMModel(
+                id: "gpt-5.3-codex-spark",
+                displayName: "GPT-5.3 Codex Spark",
+                provider: .openAI,
+                supportsTools: true,
+                supportsVision: true,
+                maxContextTokens: 1_000_000,
+                supportedEndpoint: .responses,
+                usesMaxCompletionTokens: true,
+                supportsTemperature: false
             ),
 
             // OpenAI reasoning models — do not support temperature

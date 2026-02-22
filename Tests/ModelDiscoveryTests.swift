@@ -118,11 +118,10 @@ final class OpenAIModelDiscoveryTests: XCTestCase {
     // MARK: - Chat Capability Filtering Tests
 
     func testIsChatCapableAllowsModernModels() {
-        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1"))
-        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1-mini"))
-        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1-turbo"))
         XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-5"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-5-mini"))
         XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-5-turbo"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-5.3-codex"))
         XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("o3"))
         XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("o4-mini"))
     }
@@ -131,6 +130,9 @@ final class OpenAIModelDiscoveryTests: XCTestCase {
         XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4"))
         XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4-turbo"))
         XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4-0613"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1-mini"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1-turbo"))
         XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-3.5-turbo"))
         XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-3.5-turbo-16k"))
         XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4o"))

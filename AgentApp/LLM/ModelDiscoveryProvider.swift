@@ -141,11 +141,11 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
                 displayName: displayName,
                 provider: .openAI,
                 supportsTools: true,
-                supportsVision: id.contains("4o") || id.contains("4.1") || id.contains("4-turbo")
-                    || id.contains("gpt-5"),
+                supportsVision: id.lowercased().contains("gpt-5"),
                 maxContextTokens: Self.estimateContextWindow(id),
                 supportedEndpoint: endpoint,
-                usesMaxCompletionTokens: endpoint == .responses
+                usesMaxCompletionTokens: endpoint == .responses,
+                supportsTemperature: Self.determineSupportsTemperature(id)
             )
         }
         .sorted { Self.modelSortOrder($0.id) < Self.modelSortOrder($1.id) }
@@ -158,23 +158,15 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
     // MARK: - Filtering
 
     /// Returns true if the model ID represents a Responses API-capable model.
-    /// Excludes legacy (gpt-4* and lower), non-chat, and deprecated models.
-    /// Excludes gpt-4o* (Chat Completions only). Includes o-series models.
+    /// Only allows gpt-5+ and o-series models; all gpt-4* and earlier are excluded.
     static func isChatCapableModel(_ id: String) -> Bool {
         let lowered = id.lowercased()
 
-        // Allow o-series models (o3, o4-mini, etc.) — they support the Responses API
+        // Allow o-series reasoning models
         if lowered.hasPrefix("o3") || lowered.hasPrefix("o4-") { return true }
 
-        // Must start with "gpt-" for remaining checks
-        guard lowered.hasPrefix("gpt-") else { return false }
-
-        // Exclude legacy models: gpt-3.5*, gpt-4-*, gpt-4 exact, gpt-4o*
-        if lowered.hasPrefix("gpt-3") { return false }
-        // gpt-4 exact or gpt-4-<variant> (not gpt-4.1)
-        if lowered.hasPrefix("gpt-4-") || lowered == "gpt-4" { return false }
-        // gpt-4o* — Chat Completions only
-        if lowered.hasPrefix("gpt-4o") { return false }
+        // Only allow gpt-5 and later
+        guard lowered.hasPrefix("gpt-5") else { return false }
 
         // Exclude non-chat model types by substring
         let excludedSubstrings = [
@@ -185,6 +177,18 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
             if lowered.contains(excluded) { return false }
         }
 
+        return true
+    }
+
+    // MARK: - Temperature Support
+
+    /// Returns false for model types known to reject the temperature parameter.
+    /// This includes o-series reasoning models, codex models, and thinking models.
+    static func determineSupportsTemperature(_ id: String) -> Bool {
+        let lowered = id.lowercased()
+        if lowered.hasPrefix("o1") || lowered.hasPrefix("o2") || lowered.hasPrefix("o3") || lowered.hasPrefix("o4") { return false }
+        if lowered.contains("codex") { return false }
+        if lowered.contains("thinking") { return false }
         return true
     }
 
@@ -203,10 +207,13 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
         let lowered = id.lowercased()
         if lowered.hasPrefix("o4-") { return 0 }
         if lowered.hasPrefix("o3") { return 1 }
-        if lowered.hasPrefix("gpt-5") { return 2 }
-        if lowered.hasPrefix("gpt-4.1") { return 3 }
-        if lowered.hasPrefix("gpt-4o") { return 4 }
-        return 5
+        if lowered.hasPrefix("gpt-5.3") { return 2 }
+        if lowered.hasPrefix("gpt-5.2") { return 3 }
+        if lowered.hasPrefix("gpt-5.1") { return 4 }
+        if lowered.hasPrefix("gpt-5") { return 5 }
+        if lowered.hasPrefix("gpt-4.1") { return 6 }
+        if lowered.hasPrefix("gpt-4o") { return 7 }
+        return 8
     }
 
     // MARK: - Helpers
