@@ -26,7 +26,7 @@ struct AgentConfiguration: Codable, Sendable, Identifiable {
         id: String = "default",
         name: String = "Assistant",
         systemPrompt: String = "You are a helpful AI assistant running on an iPad. You can use tools when needed to help answer questions. Be concise and helpful.",
-        model: String = "claude-sonnet-4-20250514",
+        model: String = "claude-3.7-sonnet",
         maxTokens: Int = 4096,
         temperature: Double = 0.7,
         enabledTools: [String]? = nil

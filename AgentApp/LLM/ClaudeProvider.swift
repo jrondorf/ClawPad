@@ -18,9 +18,10 @@ import FoundationNetworking
 struct ClaudeProvider: LLMProvider {
     let providerName = "Claude"
     let availableModels = [
-        "claude-sonnet-4-20250514",
-        "claude-opus-4-20250514",
-        "claude-3-5-haiku-20241022"
+        "claude-3.5-sonnet",
+        "claude-3.7-sonnet",
+        "claude-opus-4",
+        "claude-opus-4.6"
     ]
 
     private let apiKey: String
