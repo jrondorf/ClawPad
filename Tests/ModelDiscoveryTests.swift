@@ -111,18 +111,20 @@ final class OpenAIModelDiscoveryTests: XCTestCase {
         XCTAssertEqual(OpenAIModelDiscoveryProvider.estimateContextWindow("gpt-4o-mini"), 128_000)
         XCTAssertEqual(OpenAIModelDiscoveryProvider.estimateContextWindow("gpt-4-turbo"), 128_000)
         XCTAssertEqual(OpenAIModelDiscoveryProvider.estimateContextWindow("gpt-3.5-turbo"), 16_385)
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.estimateContextWindow("o3"), 200_000)
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.estimateContextWindow("o4-mini"), 200_000)
     }
 
     // MARK: - Chat Capability Filtering Tests
 
     func testIsChatCapableAllowsModernModels() {
-        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4o"))
-        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4o-mini"))
         XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1"))
         XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1-mini"))
         XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1-turbo"))
         XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-5"))
         XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-5-turbo"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("o3"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("o4-mini"))
     }
 
     func testIsChatCapableExcludesLegacyModels() {
@@ -131,6 +133,8 @@ final class OpenAIModelDiscoveryTests: XCTestCase {
         XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4-0613"))
         XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-3.5-turbo"))
         XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-3.5-turbo-16k"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4o"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4o-mini"))
     }
 
     func testIsChatCapableExcludesNonChatModels() {
@@ -156,22 +160,23 @@ final class OpenAIModelDiscoveryTests: XCTestCase {
         XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-4.1-turbo"), .responses)
         XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-5"), .responses)
         XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-5-turbo"), .responses)
-    }
-
-    func testDetermineEndpointForChatCompletions() {
-        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-4o"), .chatCompletions)
-        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-4o-mini"), .chatCompletions)
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("o3"), .responses)
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("o4-mini"), .responses)
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-4o"), .responses)
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-4o-mini"), .responses)
     }
 
     // MARK: - Sort Order Tests
 
     func testModelSortOrderNewerFirst() {
+        let o4mini = OpenAIModelDiscoveryProvider.modelSortOrder("o4-mini")
+        let o3 = OpenAIModelDiscoveryProvider.modelSortOrder("o3")
         let gpt5 = OpenAIModelDiscoveryProvider.modelSortOrder("gpt-5")
         let gpt41 = OpenAIModelDiscoveryProvider.modelSortOrder("gpt-4.1")
-        let gpt4o = OpenAIModelDiscoveryProvider.modelSortOrder("gpt-4o")
 
+        XCTAssertLessThan(o4mini, o3)
+        XCTAssertLessThan(o3, gpt5)
         XCTAssertLessThan(gpt5, gpt41)
-        XCTAssertLessThan(gpt41, gpt4o)
     }
 }
 
