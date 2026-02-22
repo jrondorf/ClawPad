@@ -24,6 +24,8 @@ struct SettingsView: View {
     @State private var claudeKey: String = ""
     @State private var openAIKey: String = ""
     @State private var showSavedAlert = false
+    @State private var isRefreshingModels = false
+    @State private var refreshError: String?
 
     /// The provider type derived from the current settings selection.
     private var selectedProviderType: LLMProviderType {
@@ -91,6 +93,26 @@ struct SettingsView: View {
                                     .foregroundStyle(.orange)
                             }
                         }
+                    }
+
+                    // Refresh Models button with loading and error state
+                    Button {
+                        refreshModels()
+                    } label: {
+                        HStack {
+                            Label("Refresh Models", systemImage: "arrow.clockwise")
+                            if isRefreshingModels {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(isRefreshingModels)
+
+                    if let error = refreshError {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
                     }
                 }
 
@@ -202,6 +224,36 @@ struct SettingsView: View {
         }
         print("[SettingsView] hasClaudeKey: \(settings.hasClaudeKey), hasOpenAIKey: \(settings.hasOpenAIKey)")
         showSavedAlert = true
+    }
+
+    /// Refreshes the model list for the currently selected provider.
+    /// Preserves the currently selected model if still valid after refresh;
+    /// falls back to the first available model otherwise.
+    private func refreshModels() {
+        isRefreshingModels = true
+        refreshError = nil
+        let provider = selectedProviderType
+        let previousModel = settings.selectedModel
+
+        Task {
+            do {
+                try await container.modelRegistry.refreshModels(for: provider, force: true)
+                let updatedModels = container.modelRegistry.models(for: provider)
+
+                // Preserve selection if still valid, otherwise fall back
+                if !updatedModels.contains(where: { $0.id == previousModel }) {
+                    if let firstModel = updatedModels.first {
+                        settings.selectedModel = firstModel.id
+                    }
+                }
+
+                isRefreshingModels = false
+            } catch {
+                print("[SettingsView] Model refresh failed: \(type(of: error))")
+                refreshError = error.localizedDescription
+                isRefreshingModels = false
+            }
+        }
     }
 }
 #endif
