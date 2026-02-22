@@ -112,6 +112,67 @@ final class OpenAIModelDiscoveryTests: XCTestCase {
         XCTAssertEqual(OpenAIModelDiscoveryProvider.estimateContextWindow("gpt-4-turbo"), 128_000)
         XCTAssertEqual(OpenAIModelDiscoveryProvider.estimateContextWindow("gpt-3.5-turbo"), 16_385)
     }
+
+    // MARK: - Chat Capability Filtering Tests
+
+    func testIsChatCapableAllowsModernModels() {
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4o"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4o-mini"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1-mini"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1-turbo"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-5"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-5-turbo"))
+    }
+
+    func testIsChatCapableExcludesLegacyModels() {
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4-turbo"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4-0613"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-3.5-turbo"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-3.5-turbo-16k"))
+    }
+
+    func testIsChatCapableExcludesNonChatModels() {
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("text-embedding-ada-002"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("tts-1"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("whisper-1"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("dall-e-3"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("davinci-002"))
+    }
+
+    func testIsChatCapableExcludesExcludedSubstrings() {
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4o-realtime-preview"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4o-audio-preview"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4o-transcribe"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4-vision-preview"))
+    }
+
+    // MARK: - Endpoint Mapping Tests
+
+    func testDetermineEndpointForResponsesAPI() {
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-4.1"), .responses)
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-4.1-mini"), .responses)
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-4.1-turbo"), .responses)
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-5"), .responses)
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-5-turbo"), .responses)
+    }
+
+    func testDetermineEndpointForChatCompletions() {
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-4o"), .chatCompletions)
+        XCTAssertEqual(OpenAIModelDiscoveryProvider.determineEndpoint("gpt-4o-mini"), .chatCompletions)
+    }
+
+    // MARK: - Sort Order Tests
+
+    func testModelSortOrderNewerFirst() {
+        let gpt5 = OpenAIModelDiscoveryProvider.modelSortOrder("gpt-5")
+        let gpt41 = OpenAIModelDiscoveryProvider.modelSortOrder("gpt-4.1")
+        let gpt4o = OpenAIModelDiscoveryProvider.modelSortOrder("gpt-4o")
+
+        XCTAssertLessThan(gpt5, gpt41)
+        XCTAssertLessThan(gpt41, gpt4o)
+    }
 }
 
 // MARK: - ModelRegistry Refresh Tests

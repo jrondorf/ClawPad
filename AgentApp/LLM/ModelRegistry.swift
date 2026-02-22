@@ -113,14 +113,16 @@ final class ModelRegistry: @unchecked Sendable {
     /// The built-in set of models. Update this list when new models are released.
     static func defaultModels() -> [LLMModel] {
         [
-            // OpenAI models
+            // OpenAI models — gpt-4.1+ use the Responses API
             LLMModel(
                 id: "gpt-4.1",
                 displayName: "GPT-4.1",
                 provider: .openAI,
                 supportsTools: true,
                 supportsVision: true,
-                maxContextTokens: 1_000_000
+                maxContextTokens: 1_000_000,
+                supportedEndpoint: .responses,
+                usesMaxCompletionTokens: true
             ),
             LLMModel(
                 id: "gpt-4.1-mini",
@@ -128,7 +130,9 @@ final class ModelRegistry: @unchecked Sendable {
                 provider: .openAI,
                 supportsTools: true,
                 supportsVision: true,
-                maxContextTokens: 1_000_000
+                maxContextTokens: 1_000_000,
+                supportedEndpoint: .responses,
+                usesMaxCompletionTokens: true
             ),
             LLMModel(
                 id: "gpt-4.1-turbo",
@@ -136,7 +140,9 @@ final class ModelRegistry: @unchecked Sendable {
                 provider: .openAI,
                 supportsTools: true,
                 supportsVision: true,
-                maxContextTokens: 1_000_000
+                maxContextTokens: 1_000_000,
+                supportedEndpoint: .responses,
+                usesMaxCompletionTokens: true
             ),
             LLMModel(
                 id: "gpt-4o",

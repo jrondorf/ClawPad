@@ -128,41 +128,81 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
             throw ModelDiscoveryError.decodingError("Unexpected response structure")
         }
 
-        // Prefixes to exclude: embeddings, audio, moderation, system/internal models
-        let excludedPrefixes = ["text-embedding", "embedding", "tts-", "whisper", "dall-e",
-                                "davinci", "babbage", "moderation", "omni-moderation"]
-
         let models: [LLMModel] = modelList.compactMap { modelObj in
             guard let id = modelObj["id"] as? String else { return nil }
 
-            // Include only chat-capable public models (gpt-* prefix)
-            guard id.hasPrefix("gpt-") else { return nil }
+            // Only include models that pass the chat-capability filter
+            guard Self.isChatCapableModel(id) else { return nil }
 
-            // Exclude known non-chat models even if they start with gpt-
-            for prefix in excludedPrefixes {
-                if id.hasPrefix(prefix) { return nil }
-            }
-
-            // Exclude instruct-only variants and realtime/audio-specific models
-            if id.contains("instruct") || id.contains("realtime") || id.contains("audio") {
-                return nil
-            }
-
+            let endpoint = Self.determineEndpoint(id)
             let displayName = Self.formatDisplayName(id)
             return LLMModel(
                 id: id,
                 displayName: displayName,
                 provider: .openAI,
                 supportsTools: true,
-                supportsVision: id.contains("4o") || id.contains("4.1") || id.contains("4-turbo"),
-                maxContextTokens: Self.estimateContextWindow(id)
+                supportsVision: id.contains("4o") || id.contains("4.1") || id.contains("4-turbo")
+                    || id.contains("gpt-5"),
+                maxContextTokens: Self.estimateContextWindow(id),
+                supportedEndpoint: endpoint,
+                usesMaxCompletionTokens: endpoint == .responses
             )
         }
-        .sorted { $0.id < $1.id }
+        .sorted { Self.modelSortOrder($0.id) < Self.modelSortOrder($1.id) }
 
         print("[ModelDiscovery] OpenAI: discovered \(models.count) chat models")
         return models
         #endif
+    }
+
+    // MARK: - Filtering
+
+    /// Returns true if the model ID represents a chat-capable model.
+    /// Excludes legacy (gpt-4* and lower), non-chat, and deprecated models.
+    static func isChatCapableModel(_ id: String) -> Bool {
+        let lowered = id.lowercased()
+
+        // Must start with "gpt-"
+        guard lowered.hasPrefix("gpt-") else { return false }
+
+        // Exclude legacy models: gpt-3.5*, gpt-4* (but allow gpt-4.1+, gpt-4o*)
+        if lowered.hasPrefix("gpt-3") { return false }
+        // gpt-4 exact or gpt-4-<variant> (not gpt-4.1, gpt-4o)
+        if lowered.hasPrefix("gpt-4-") || lowered == "gpt-4" { return false }
+
+        // Exclude non-chat model types by substring
+        let excludedSubstrings = [
+            "embedding", "audio", "tts", "whisper", "moderation",
+            "instruct", "vision-preview", "realtime", "transcribe", "search"
+        ]
+        for excluded in excludedSubstrings {
+            if lowered.contains(excluded) { return false }
+        }
+
+        return true
+    }
+
+    // MARK: - Endpoint Mapping
+
+    /// Determines the correct OpenAI API endpoint for a model based on its ID.
+    /// Models gpt-4.1+ and gpt-5+ use the Responses API; others use Chat Completions.
+    static func determineEndpoint(_ id: String) -> OpenAIEndpointType {
+        let lowered = id.lowercased()
+        if lowered.hasPrefix("gpt-4.1") || lowered.hasPrefix("gpt-5") {
+            return .responses
+        }
+        return .chatCompletions
+    }
+
+    // MARK: - Sorting
+
+    /// Returns a numeric sort key so newer/higher models sort first.
+    static func modelSortOrder(_ id: String) -> Int {
+        let lowered = id.lowercased()
+        if lowered.hasPrefix("gpt-5") { return 0 }
+        if lowered.hasPrefix("gpt-4.1") { return 1 }
+        if lowered.hasPrefix("gpt-4o") { return 2 }
+        return 3
     }
 
     // MARK: - Helpers
@@ -183,6 +223,7 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
 
     /// Estimates context window based on known model ID patterns.
     static func estimateContextWindow(_ id: String) -> Int {
+        if id.contains("gpt-5") { return 1_000_000 }
         if id.contains("4.1") { return 1_000_000 }
         if id.contains("4o") { return 128_000 }
         if id.contains("4-turbo") { return 128_000 }

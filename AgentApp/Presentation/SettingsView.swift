@@ -92,6 +92,22 @@ struct SettingsView: View {
                                     .font(.caption)
                                     .foregroundStyle(.orange)
                             }
+                            if selected.provider == .openAI {
+                                Text(selected.supportedEndpoint.rawValue)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        selected.supportedEndpoint == .responses
+                                            ? Color.purple.opacity(0.15)
+                                            : Color.gray.opacity(0.15)
+                                    )
+                                    .foregroundStyle(
+                                        selected.supportedEndpoint == .responses
+                                            ? .purple : .secondary
+                                    )
+                                    .clipShape(Capsule())
+                            }
                         }
                     }
 
