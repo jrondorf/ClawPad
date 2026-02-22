@@ -316,8 +316,18 @@ final class DependencyContainer: ObservableObject {
 
     func makeAgentRuntime() -> AgentRuntime? {
         guard let provider = makeProvider() else { return nil }
+
+        // Validate the selected model is compatible with the provider
+        let selectedModel = settings.selectedModel
+        if settings.selectedProvider == "OpenAI" {
+            guard OpenAIModelDiscoveryProvider.isChatCapableModel(selectedModel) else {
+                print("[DependencyContainer] Selected model '\(selectedModel)' is not chat-capable")
+                return nil
+            }
+        }
+
         let config = AgentConfiguration(
-            model: settings.selectedModel,
+            model: selectedModel,
             temperature: 0.7
         )
         return AgentRuntime(
@@ -404,8 +414,18 @@ final class DependencyContainer: @unchecked Sendable {
 
     func makeAgentRuntime() -> AgentRuntime? {
         guard let provider = makeProvider() else { return nil }
+
+        // Validate the selected model is compatible with the provider
+        let selectedModel = settings.selectedModel
+        if settings.selectedProvider == "OpenAI" {
+            guard OpenAIModelDiscoveryProvider.isChatCapableModel(selectedModel) else {
+                print("[DependencyContainer] Selected model '\(selectedModel)' is not chat-capable")
+                return nil
+            }
+        }
+
         let config = AgentConfiguration(
-            model: settings.selectedModel,
+            model: selectedModel,
             temperature: 0.7
         )
         return AgentRuntime(

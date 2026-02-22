@@ -202,7 +202,11 @@ struct OpenAIProvider: LLMProvider {
         }
         print("[OpenAIProvider] Using API key for request")
 
-        let url = baseURL.appendingPathComponent("/v1/chat/completions")
+        // Determine endpoint and token parameter based on model ID
+        let endpoint = OpenAIModelDiscoveryProvider.determineEndpoint(configuration.model)
+        let path = endpoint == .responses ? "/v1/responses" : "/v1/chat/completions"
+
+        let url = baseURL.appendingPathComponent(path)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -210,10 +214,16 @@ struct OpenAIProvider: LLMProvider {
 
         var body: [String: Any] = [
             "model": configuration.model,
-            "max_tokens": configuration.maxTokens,
             "temperature": configuration.temperature,
             "stream": stream
         ]
+
+        // Use correct token parameter for the model
+        if endpoint == .responses {
+            body["max_output_tokens"] = configuration.maxTokens
+        } else {
+            body["max_tokens"] = configuration.maxTokens
+        }
 
         body["messages"] = messages.map { encodeMessage($0) }
 

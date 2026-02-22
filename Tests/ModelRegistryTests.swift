@@ -154,4 +154,44 @@ final class ModelRegistryTests: XCTestCase {
             XCTAssertFalse(model.displayName.isEmpty)
         }
     }
+
+    // MARK: - Endpoint Metadata Tests
+
+    func testOpenAIEndpointTypeRawValues() {
+        XCTAssertEqual(OpenAIEndpointType.chatCompletions.rawValue, "Chat API")
+        XCTAssertEqual(OpenAIEndpointType.responses.rawValue, "Responses API")
+    }
+
+    func testDefaultModelsHaveCorrectEndpoints() {
+        let registry = ModelRegistry()
+        let openAIModels = registry.models(for: .openAI)
+
+        for model in openAIModels {
+            if model.id.hasPrefix("gpt-4.1") {
+                XCTAssertEqual(model.supportedEndpoint, .responses,
+                               "\(model.id) should use Responses API")
+                XCTAssertTrue(model.usesMaxCompletionTokens,
+                              "\(model.id) should use max_completion_tokens")
+            } else if model.id.hasPrefix("gpt-4o") {
+                XCTAssertEqual(model.supportedEndpoint, .chatCompletions,
+                               "\(model.id) should use Chat Completions")
+                XCTAssertFalse(model.usesMaxCompletionTokens,
+                               "\(model.id) should use max_tokens")
+            }
+        }
+    }
+
+    func testLLMModelDefaultEndpoint() {
+        // Models created without specifying endpoint should default to chatCompletions
+        let model = LLMModel(
+            id: "test-model",
+            displayName: "Test",
+            provider: .anthropic,
+            supportsTools: false,
+            supportsVision: false,
+            maxContextTokens: 4_096
+        )
+        XCTAssertEqual(model.supportedEndpoint, .chatCompletions)
+        XCTAssertFalse(model.usesMaxCompletionTokens)
+    }
 }
