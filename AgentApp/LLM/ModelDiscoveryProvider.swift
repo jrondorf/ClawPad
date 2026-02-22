@@ -131,7 +131,7 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
         let models: [LLMModel] = modelList.compactMap { modelObj in
             guard let id = modelObj["id"] as? String else { return nil }
 
-            // Only include models that pass the chat-capability filter
+            // Only include models that pass the Responses API-capable filter
             guard Self.isChatCapableModel(id) else { return nil }
 
             let endpoint = Self.determineEndpoint(id)
@@ -157,18 +157,24 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
 
     // MARK: - Filtering
 
-    /// Returns true if the model ID represents a chat-capable model.
+    /// Returns true if the model ID represents a Responses API-capable model.
     /// Excludes legacy (gpt-4* and lower), non-chat, and deprecated models.
+    /// Excludes gpt-4o* (Chat Completions only). Includes o-series models.
     static func isChatCapableModel(_ id: String) -> Bool {
         let lowered = id.lowercased()
 
-        // Must start with "gpt-"
+        // Allow o-series models (o3, o4-mini, etc.) — they support the Responses API
+        if lowered.hasPrefix("o3") || lowered.hasPrefix("o4-") { return true }
+
+        // Must start with "gpt-" for remaining checks
         guard lowered.hasPrefix("gpt-") else { return false }
 
-        // Exclude legacy models: gpt-3.5*, gpt-4* (but allow gpt-4.1+, gpt-4o*)
+        // Exclude legacy models: gpt-3.5*, gpt-4-*, gpt-4 exact, gpt-4o*
         if lowered.hasPrefix("gpt-3") { return false }
-        // gpt-4 exact or gpt-4-<variant> (not gpt-4.1, gpt-4o)
+        // gpt-4 exact or gpt-4-<variant> (not gpt-4.1)
         if lowered.hasPrefix("gpt-4-") || lowered == "gpt-4" { return false }
+        // gpt-4o* — Chat Completions only
+        if lowered.hasPrefix("gpt-4o") { return false }
 
         // Exclude non-chat model types by substring
         let excludedSubstrings = [
@@ -185,13 +191,9 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
     // MARK: - Endpoint Mapping
 
     /// Determines the correct OpenAI API endpoint for a model based on its ID.
-    /// Models gpt-4.1+ and gpt-5+ use the Responses API; others use Chat Completions.
+    /// All exposed models use the Responses API.
     static func determineEndpoint(_ id: String) -> OpenAIEndpointType {
-        let lowered = id.lowercased()
-        if lowered.hasPrefix("gpt-4.1") || lowered.hasPrefix("gpt-5") {
-            return .responses
-        }
-        return .chatCompletions
+        return .responses
     }
 
     // MARK: - Sorting
@@ -199,10 +201,12 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
     /// Returns a numeric sort key so newer/higher models sort first.
     static func modelSortOrder(_ id: String) -> Int {
         let lowered = id.lowercased()
-        if lowered.hasPrefix("gpt-5") { return 0 }
-        if lowered.hasPrefix("gpt-4.1") { return 1 }
-        if lowered.hasPrefix("gpt-4o") { return 2 }
-        return 3
+        if lowered.hasPrefix("o4-") { return 0 }
+        if lowered.hasPrefix("o3") { return 1 }
+        if lowered.hasPrefix("gpt-5") { return 2 }
+        if lowered.hasPrefix("gpt-4.1") { return 3 }
+        if lowered.hasPrefix("gpt-4o") { return 4 }
+        return 5
     }
 
     // MARK: - Helpers
@@ -223,12 +227,14 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
 
     /// Estimates context window based on known model ID patterns.
     static func estimateContextWindow(_ id: String) -> Int {
-        if id.contains("gpt-5") { return 1_000_000 }
-        if id.contains("4.1") { return 1_000_000 }
-        if id.contains("4o") { return 128_000 }
-        if id.contains("4-turbo") { return 128_000 }
-        if id.contains("gpt-4") { return 128_000 }
-        if id.contains("gpt-3.5") { return 16_385 }
+        let lowered = id.lowercased()
+        if lowered.contains("gpt-5") { return 1_000_000 }
+        if lowered.contains("4.1") { return 1_000_000 }
+        if lowered.hasPrefix("o3") || lowered.hasPrefix("o4-") { return 200_000 }
+        if lowered.contains("4o") { return 128_000 }
+        if lowered.contains("4-turbo") { return 128_000 }
+        if lowered.contains("gpt-4") { return 128_000 }
+        if lowered.contains("gpt-3.5") { return 16_385 }
         return 128_000
     }
 }

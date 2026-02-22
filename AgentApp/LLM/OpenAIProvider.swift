@@ -1,7 +1,7 @@
 // OpenAIProvider.swift
 // AgentApp
 //
-// Concrete LLMProvider implementation for OpenAI's Chat Completions API.
+// Concrete LLMProvider implementation for OpenAI's Responses API.
 // Supports streaming responses, tool/function calling, and system prompts.
 //
 // Architecture Decision: Follows the same pattern as ClaudeProvider.
@@ -21,9 +21,9 @@ struct OpenAIProvider: LLMProvider {
     let availableModels = [
         "gpt-4.1",
         "gpt-4.1-mini",
-        "gpt-4.1-turbo",
-        "gpt-4o",
-        "gpt-4o-mini"
+        "gpt-4.1-nano",
+        "o3",
+        "o4-mini"
     ]
 
     /// Closure that provides the API key at request time.
@@ -96,8 +96,8 @@ struct OpenAIProvider: LLMProvider {
                         return
                     }
 
-                    // Parse OpenAI SSE stream
-                    var toolCallBuffers: [Int: (id: String, name: String, arguments: String)] = [:]
+                    // Parse OpenAI Responses API SSE stream
+                    var currentEvent: String = ""
 
                     for try await line in bytes.lines {
                         guard !Task.isCancelled else {
@@ -105,73 +105,54 @@ struct OpenAIProvider: LLMProvider {
                             return
                         }
 
+                        if line.hasPrefix("event: ") {
+                            currentEvent = String(line.dropFirst(7))
+                            continue
+                        }
+
                         guard line.hasPrefix("data: ") else { continue }
                         let jsonString = String(line.dropFirst(6))
                         guard jsonString != "[DONE]" else { break }
 
+                        // Handle stream completion/error events
+                        if currentEvent == "response.completed" { break }
+                        if currentEvent == "response.failed" || currentEvent == "error" {
+                            if let data = jsonString.data(using: .utf8),
+                               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                                let msg = (json["message"] as? String)
+                                    ?? (json["error"] as? String)
+                                    ?? "Unknown error"
+                                continuation.finish(throwing: AgentError.llmRequestFailed(msg))
+                            } else {
+                                continuation.finish(throwing: AgentError.llmRequestFailed(jsonString))
+                            }
+                            return
+                        }
+
                         guard let data = jsonString.data(using: .utf8),
-                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                              let choices = json["choices"] as? [[String: Any]],
-                              let choice = choices.first,
-                              let delta = choice["delta"] as? [String: Any] else {
+                              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                             continue
                         }
 
-                        // Handle text content
-                        if let content = delta["content"] as? String {
-                            continuation.yield(.token(content))
-                        }
-
-                        // Handle tool calls
-                        if let toolCalls = delta["tool_calls"] as? [[String: Any]] {
-                            for toolCallDelta in toolCalls {
-                                guard let index = toolCallDelta["index"] as? Int else { continue }
-
-                                if let id = toolCallDelta["id"] as? String {
-                                    let function = toolCallDelta["function"] as? [String: Any]
-                                    toolCallBuffers[index] = (
-                                        id: id,
-                                        name: function?["name"] as? String ?? "",
-                                        arguments: function?["arguments"] as? String ?? ""
-                                    )
-                                } else if let function = toolCallDelta["function"] as? [String: Any] {
-                                    if let name = function["name"] as? String, !name.isEmpty {
-                                        toolCallBuffers[index]?.name += name
-                                    }
-                                    if let args = function["arguments"] as? String {
-                                        toolCallBuffers[index]?.arguments += args
-                                    }
-                                }
+                        // response.output_text.delta → yield token
+                        if currentEvent == "response.output_text.delta" {
+                            if let delta = json["delta"] as? String {
+                                continuation.yield(.token(delta))
                             }
+                            continue
                         }
 
-                        // Check for finish reason
-                        if let finishReason = choice["finish_reason"] as? String,
-                           finishReason == "tool_calls" {
-                            // Emit all buffered tool calls
-                            for index in toolCallBuffers.keys.sorted() {
-                                if let buffer = toolCallBuffers[index] {
-                                    let toolCall = ToolCall(
-                                        id: buffer.id,
-                                        name: buffer.name,
-                                        arguments: buffer.arguments
-                                    )
-                                    continuation.yield(.toolCallStart(toolCall))
-                                }
+                        // response.output_item.done → check for function_call
+                        if currentEvent == "response.output_item.done" {
+                            if let item = json["item"] as? [String: Any],
+                               let type_ = item["type"] as? String, type_ == "function_call",
+                               let id = item["id"] as? String,
+                               let name = item["name"] as? String,
+                               let arguments = item["arguments"] as? String {
+                                let toolCall = ToolCall(id: id, name: name, arguments: arguments)
+                                continuation.yield(.toolCallStart(toolCall))
                             }
-                            toolCallBuffers.removeAll()
-                        }
-                    }
-
-                    // Emit any remaining tool calls
-                    for index in toolCallBuffers.keys.sorted() {
-                        if let buffer = toolCallBuffers[index] {
-                            let toolCall = ToolCall(
-                                id: buffer.id,
-                                name: buffer.name,
-                                arguments: buffer.arguments
-                            )
-                            continuation.yield(.toolCallStart(toolCall))
+                            continue
                         }
                     }
 
@@ -202,11 +183,7 @@ struct OpenAIProvider: LLMProvider {
         }
         print("[OpenAIProvider] Using API key for request")
 
-        // Determine endpoint and token parameter based on model ID
-        let endpoint = OpenAIModelDiscoveryProvider.determineEndpoint(configuration.model)
-        let path = endpoint == .responses ? "/v1/responses" : "/v1/chat/completions"
-
-        let url = baseURL.appendingPathComponent(path)
+        let url = baseURL.appendingPathComponent("/v1/responses")
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -215,17 +192,11 @@ struct OpenAIProvider: LLMProvider {
         var body: [String: Any] = [
             "model": configuration.model,
             "temperature": configuration.temperature,
-            "stream": stream
+            "stream": stream,
+            "max_output_tokens": configuration.maxTokens
         ]
 
-        // Use correct token parameter for the model
-        if endpoint == .responses {
-            body["max_output_tokens"] = configuration.maxTokens
-        } else {
-            body["max_tokens"] = configuration.maxTokens
-        }
-
-        body["messages"] = messages.map { encodeMessage($0) }
+        body["input"] = messages.map { encodeMessage($0) }
 
         if !tools.isEmpty {
             body["tools"] = tools.map { encodeTool($0) }
@@ -236,36 +207,54 @@ struct OpenAIProvider: LLMProvider {
     }
 
     private func encodeMessage(_ message: AgentMessage) -> [String: Any] {
-        var encoded: [String: Any] = [
-            "role": message.role.rawValue
-        ]
-
-        if let content = message.content {
-            encoded["content"] = content
-        }
-
-        // Encode tool calls in assistant messages
-        if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
-            encoded["tool_calls"] = toolCalls.map { call -> [String: Any] in
-                [
-                    "id": call.id,
-                    "type": "function",
-                    "function": [
-                        "name": call.name,
-                        "arguments": call.arguments
+        // Tool result messages
+        if let result = message.toolResult {
+            return [
+                "role": "tool",
+                "content": [
+                    [
+                        "type": "function_call_output",
+                        "call_id": result.toolCallID,
+                        "output": result.content
                     ]
                 ]
+            ]
+        }
+
+        // Assistant messages with tool calls
+        if let toolCalls = message.toolCalls, !toolCalls.isEmpty {
+            let content: [[String: Any]] = toolCalls.map { call in
+                [
+                    "type": "function_call",
+                    "call_id": call.id,
+                    "name": call.name,
+                    "arguments": call.arguments
+                ]
             }
+            return [
+                "role": "assistant",
+                "content": content
+            ]
         }
 
-        // Encode tool results
-        if let result = message.toolResult {
-            encoded["role"] = "tool"
-            encoded["tool_call_id"] = result.toolCallID
-            encoded["content"] = result.content
+        // Assistant text messages
+        if message.role == .assistant {
+            return [
+                "role": "assistant",
+                "content": [
+                    [
+                        "type": "output_text",
+                        "text": message.content ?? ""
+                    ]
+                ]
+            ]
         }
 
-        return encoded
+        // System and user messages
+        return [
+            "role": message.role.rawValue,
+            "content": message.content ?? ""
+        ]
     }
 
     private func encodeTool(_ tool: ToolDefinition) -> [String: Any] {
@@ -291,11 +280,9 @@ struct OpenAIProvider: LLMProvider {
 
         return [
             "type": "function",
-            "function": [
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": parameters
-            ]
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": parameters
         ]
     }
 
