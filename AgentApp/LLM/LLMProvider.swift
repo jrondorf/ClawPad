@@ -17,22 +17,19 @@ struct LLMConfiguration: Codable, Sendable {
     let temperature: Double
     let topP: Double?
     let systemPrompt: String?
-    let supportsTemperature: Bool
 
     init(
         model: String,
         maxTokens: Int = 4096,
         temperature: Double = 0.7,
         topP: Double? = nil,
-        systemPrompt: String? = nil,
-        supportsTemperature: Bool = true
+        systemPrompt: String? = nil
     ) {
         self.model = model
         self.maxTokens = maxTokens
         self.temperature = temperature
         self.topP = topP
         self.systemPrompt = systemPrompt
-        self.supportsTemperature = supportsTemperature
     }
 }
 

@@ -144,8 +144,7 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
                 supportsVision: id.lowercased().contains("gpt-5"),
                 maxContextTokens: Self.estimateContextWindow(id),
                 supportedEndpoint: endpoint,
-                usesMaxCompletionTokens: endpoint == .responses,
-                supportsTemperature: Self.determineSupportsTemperature(id)
+                usesMaxCompletionTokens: endpoint == .responses
             )
         }
         .sorted { Self.modelSortOrder($0.id) < Self.modelSortOrder($1.id) }
@@ -177,18 +176,6 @@ struct OpenAIModelDiscoveryProvider: ModelDiscoveryProvider {
             if lowered.contains(excluded) { return false }
         }
 
-        return true
-    }
-
-    // MARK: - Temperature Support
-
-    /// Returns false for model types known to reject the temperature parameter.
-    /// This includes o-series reasoning models, codex models, and thinking models.
-    static func determineSupportsTemperature(_ id: String) -> Bool {
-        let lowered = id.lowercased()
-        if lowered.hasPrefix("o1") || lowered.hasPrefix("o2") || lowered.hasPrefix("o3") || lowered.hasPrefix("o4") { return false }
-        if lowered.contains("codex") { return false }
-        if lowered.contains("thinking") { return false }
         return true
     }
 
