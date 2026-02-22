@@ -79,11 +79,12 @@ final class ModelRegistryTests: XCTestCase {
         XCTAssertGreaterThan(openAIModels.count, 0)
 
         let ids = openAIModels.map { $0.id }
-        XCTAssertTrue(ids.contains("gpt-4.1"))
-        XCTAssertTrue(ids.contains("gpt-4.1-mini"))
-        XCTAssertTrue(ids.contains("gpt-4.1-turbo"))
-        XCTAssertTrue(ids.contains("gpt-4o"))
-        XCTAssertTrue(ids.contains("gpt-4o-mini"))
+        XCTAssertTrue(ids.contains("gpt-5"))
+        XCTAssertTrue(ids.contains("gpt-5-mini"))
+        XCTAssertTrue(ids.contains("gpt-5.1"))
+        XCTAssertTrue(ids.contains("gpt-5.2"))
+        XCTAssertTrue(ids.contains("gpt-5.3-codex"))
+        XCTAssertTrue(ids.contains("gpt-5.3-codex-spark"))
     }
 
     func testDefaultModelsContainAnthropic() {
@@ -167,16 +168,11 @@ final class ModelRegistryTests: XCTestCase {
         let openAIModels = registry.models(for: .openAI)
 
         for model in openAIModels {
-            if model.id.hasPrefix("gpt-4.1") {
+            if model.id.hasPrefix("gpt-5") {
                 XCTAssertEqual(model.supportedEndpoint, .responses,
                                "\(model.id) should use Responses API")
                 XCTAssertTrue(model.usesMaxCompletionTokens,
                               "\(model.id) should use max_completion_tokens")
-            } else if model.id.hasPrefix("gpt-4o") {
-                XCTAssertEqual(model.supportedEndpoint, .chatCompletions,
-                               "\(model.id) should use Chat Completions")
-                XCTAssertFalse(model.usesMaxCompletionTokens,
-                               "\(model.id) should use max_tokens")
             }
         }
     }
@@ -227,8 +223,9 @@ final class ModelRegistryTests: XCTestCase {
         let registry = ModelRegistry()
         let openAIModels = registry.models(for: .openAI)
 
+        let noTempIds: Set<String> = ["o3", "o4-mini", "gpt-5.3-codex", "gpt-5.3-codex-spark"]
         for model in openAIModels {
-            if model.id == "o3" || model.id == "o4-mini" {
+            if noTempIds.contains(model.id) {
                 XCTAssertFalse(model.supportsTemperature,
                                "\(model.id) should not support temperature")
             } else {
@@ -243,5 +240,28 @@ final class ModelRegistryTests: XCTestCase {
         let ids = registry.models(for: .openAI).map { $0.id }
         XCTAssertTrue(ids.contains("o3"))
         XCTAssertTrue(ids.contains("o4-mini"))
+    }
+
+    func testCodexModelsDoNotSupportTemperature() {
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.determineSupportsTemperature("gpt-5.3-codex"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.determineSupportsTemperature("gpt-5.3-codex-spark"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.determineSupportsTemperature("gpt-5.2-codex"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.determineSupportsTemperature("gpt-5"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.determineSupportsTemperature("gpt-5-mini"))
+    }
+
+    func testDiscoveryFilterOnlyAllowsGPT5AndLater() {
+        // Should reject legacy models
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4o"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4o-mini"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-4.1"))
+        XCTAssertFalse(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-3.5-turbo"))
+
+        // Should accept gpt-5+ and o-series
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-5"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-5.2"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("gpt-5.3-codex"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("o3"))
+        XCTAssertTrue(OpenAIModelDiscoveryProvider.isChatCapableModel("o4-mini"))
     }
 }
