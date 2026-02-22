@@ -200,7 +200,7 @@ struct OpenAIProvider: LLMProvider {
             print("[OpenAIProvider] No API key available at request time")
             throw AgentError.authenticationFailed
         }
-        print("[OpenAIProvider] Provider received non-empty API key: true")
+        print("[OpenAIProvider] Using API key for request")
 
         let url = baseURL.appendingPathComponent("/v1/chat/completions")
         var request = URLRequest(url: url)

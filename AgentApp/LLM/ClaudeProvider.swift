@@ -192,7 +192,7 @@ struct ClaudeProvider: LLMProvider {
             print("[ClaudeProvider] No API key available at request time")
             throw AgentError.authenticationFailed
         }
-        print("[ClaudeProvider] Provider received non-empty API key: true")
+        print("[ClaudeProvider] Using API key for request")
 
         let url = baseURL.appendingPathComponent("/v1/messages")
         var request = URLRequest(url: url)
