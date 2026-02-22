@@ -161,6 +161,30 @@ final class ModelRegistry: @unchecked Sendable {
                 maxContextTokens: 128_000
             ),
 
+            // OpenAI reasoning models — do not support temperature
+            LLMModel(
+                id: "o3",
+                displayName: "o3",
+                provider: .openAI,
+                supportsTools: true,
+                supportsVision: true,
+                maxContextTokens: 200_000,
+                supportedEndpoint: .responses,
+                usesMaxCompletionTokens: true,
+                supportsTemperature: false
+            ),
+            LLMModel(
+                id: "o4-mini",
+                displayName: "o4-mini",
+                provider: .openAI,
+                supportsTools: true,
+                supportsVision: true,
+                maxContextTokens: 200_000,
+                supportedEndpoint: .responses,
+                usesMaxCompletionTokens: true,
+                supportsTemperature: false
+            ),
+
             // Anthropic models
             LLMModel(
                 id: "claude-3.5-sonnet",
